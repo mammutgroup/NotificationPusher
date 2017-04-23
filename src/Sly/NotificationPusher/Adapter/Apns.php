@@ -85,7 +85,7 @@ class Apns extends BaseAdapter
 
         foreach ($this->response as $response) {
             if ((int)$response->getStatusCode() === 200){
-                $pushedDevices->add($response->getApnsId());
+                $pushedDevices->add($device);
             }
         }
 
