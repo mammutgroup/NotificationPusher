@@ -1,5 +1,5 @@
 {
-    "name": "turbo124/notification-pusher",
+    "name": "mammutgroup/notification-pusher",
     "description": "Standalone PHP library for easy devices notifications push.",
     "keywords": ["apple", "iphone", "apns", "android", "gcm", "firebase", "notification", "message", "push", "pusher"],
     "homepage": "https://github.com/Turbo124/NotificationPusher",
@@ -13,7 +13,7 @@
         {
             "name": "Contributors",
             "homepage": "https://github.com/Ph3nol/NotificationPusher/contributors"
-        }
+        }        
     ],
     "minimum-stability": "dev",
     "require": {
