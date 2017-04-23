@@ -1,32 +1,43 @@
 <?php
-namespace NotificationPusherAdapter\Adapter;
+namespace Sly\NotificationPusher\Adapter;
 
-use Sly\NotificationPusherAdapter\Adapter\Fcm\Client;
 use Sly\NotificationPusher\Adapter\Fcm\Message;
-use Sly\NotificationPusher\Adapter\Gcm;
-use Sly\NotificationPusher\Model\MessageInterface;
-use ZendService\Google\Gcm\Client as BaseClient;
+use Sly\NotificationPusher\Model\BaseOptionedModel;
+use Sly\NotificationPusher\Adapter\Fcm\Client as ServiceClient;
 
 class Fcm extends Gcm
 {
     /**
      * Get opened client.
      *
-     * @param  \ZendService\Google\Gcm\Client $client
-     * @return \App\Services\PushNotification\Fcm\Client
+     * @return \ZendService\Google\Gcm\Client
      */
-    public function getOpenedClient(BaseClient $client)
+    public function getOpenedClient()
     {
-        return parent::getOpenedClient(new Client);
+        if (!isset($this->openedClient)) {
+            $this->openedClient = new ServiceClient();
+            $this->openedClient->setApiKey($this->getParameter('apiKey'));
+
+            $newClient = new \Zend\Http\Client(
+                null,
+                [
+                    'adapter' => 'Zend\Http\Client\Adapter\Socket',
+                    'sslverifypeer' => false
+                ]
+            );
+
+            $this->openedClient->setHttpClient($newClient);
+        }
+
+        return $this->openedClient;
     }
+
     /**
-     * Get service message from origin.
-     *
-     * @param  array $tokens
-     * @param  \Sly\NotificationPusher\Model\MessageInterface $message
-     * @return \App\Services\PushNotification\Fcm\Message
+     * @param array $tokens
+     * @param BaseOptionedModel $message
+     * @return Message
      */
-    public function getServiceMessageFromOrigin(array $tokens, MessageInterface $message)
+    public function getServiceMessageFromOrigin(array $tokens, BaseOptionedModel $message)
     {
         $data = $message->getOptions();
         $data['message'] = $message->getText();
@@ -41,6 +52,7 @@ class Fcm extends Gcm
             ->setPriority($this->getParameter('priority'));
         return $serviceMessage;
     }
+
     /**
      * Get the feedback.
      *

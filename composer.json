@@ -23,7 +23,8 @@
         "symfony/process": "~2.3|~3.0",
         "zendframework/zendservice-apple-apns": "^1.1.0",
         "zendframework/zendservice-google-gcm": "1.*",
-        "doctrine/inflector": "~1.0"
+        "doctrine/inflector": "~1.0",
+        "mammutgroup/pushok" : "^0.2"
     },
     "require-dev": {
         "atoum/atoum": "dev-master"

@@ -11,20 +11,21 @@
 
 namespace Sly\NotificationPusher\Adapter;
 
-use Sly\NotificationPusher\Model\BaseOptionedModel;
-use Sly\NotificationPusher\Model\PushInterface;
-use Sly\NotificationPusher\Model\DeviceInterface;
+use Pushok\AuthProvider\Token;
+use Pushok\Client;
+use Pushok\Notification;
+use Pushok\Payload;
+use Pushok\Payload\Alert;
+use Sly\NotificationPusher\Collection\DeviceCollection;
 use Sly\NotificationPusher\Exception\AdapterException;
 use Sly\NotificationPusher\Exception\PushException;
-use Sly\NotificationPusher\Collection\DeviceCollection;
-
+use Sly\NotificationPusher\Model\BaseOptionedModel;
+use Sly\NotificationPusher\Model\PushInterface;
 use ZendService\Apple\Apns\Client\AbstractClient as ServiceAbstractClient;
+use ZendService\Apple\Apns\Client\Feedback as ServiceFeedbackClient;
 use ZendService\Apple\Apns\Client\Message as ServiceClient;
 use ZendService\Apple\Apns\Message as ServiceMessage;
-use ZendService\Apple\Apns\Message\Alert as ServiceAlert;
 use ZendService\Apple\Apns\Response\Message as ServiceResponse;
-use ZendService\Apple\Apns\Exception\RuntimeException as ServiceRuntimeException;
-use ZendService\Apple\Apns\Client\Feedback as ServiceFeedbackClient;
 
 /**
  * APNS adapter.
@@ -35,10 +36,8 @@ use ZendService\Apple\Apns\Client\Feedback as ServiceFeedbackClient;
  */
 class Apns extends BaseAdapter
 {
-
     /** @var ServiceClient */
     private $openedClient;
-
     /** @var ServiceFeedbackClient */
     private $feedbackClient;
 
@@ -51,7 +50,7 @@ class Apns extends BaseAdapter
     {
         parent::__construct($parameters);
 
-        $cert = $this->getParameter('certificate');
+        $cert = $this->getParameter('private_key_path');
 
         if (false === file_exists($cert)) {
             throw new AdapterException(sprintf('Certificate %s does not exist', $cert));
@@ -69,17 +68,24 @@ class Apns extends BaseAdapter
 
         $pushedDevices = new DeviceCollection();
 
+        $payload = $this->getServiceMessageFromOrigin($push->getMessage());
+
+        $notifications = [];
+
         foreach ($push->getDevices() as $device) {
-            $message = $this->getServiceMessageFromOrigin($device, $push->getMessage());
+            $notifications[] = new Notification($payload, $device->getToken());
+        }
 
-            try {
-                $this->response = $client->send($message);
-            } catch (ServiceRuntimeException $e) {
-                throw new PushException($e->getMessage());
-            }
+        try {
+            $client->addNotifications($notifications);
+            $this->response = $client->push();
+        } catch (\Exception $e) {
+            throw new PushException($e->getMessage());
+        }
 
-            if (ServiceResponse::RESULT_OK === $this->response->getCode()) {
-                $pushedDevices->add($device);
+        foreach ($this->response as $response) {
+            if ((int)$response->getStatusCode() === 200){
+                $pushedDevices->add($response->getApnsId());
             }
         }
 
@@ -93,8 +99,9 @@ class Apns extends BaseAdapter
      */
     public function getFeedback()
     {
-        $client           = $this->getOpenedFeedbackClient();
-        $responses        = [];
+        //@todo feedback??
+        $client = $this->getOpenedFeedbackClient();
+        $responses = [];
         $serviceResponses = $client->feedback();
 
         foreach ($serviceResponses as $response) {
@@ -113,12 +120,8 @@ class Apns extends BaseAdapter
      */
     public function getOpenedClient(ServiceAbstractClient $client)
     {
-        $client->open(
-            $this->isProductionEnvironment() ? ServiceClient::PRODUCTION_URI : ServiceClient::SANDBOX_URI,
-            $this->getParameter('certificate'),
-            $this->getParameter('passPhrase')
-        );
-
+        $authProvider = Token::create($this->getParameters());
+        $client = new Client($authProvider, $this->isProductionEnvironment());
         return $client;
     }
 
@@ -144,7 +147,7 @@ class Apns extends BaseAdapter
     private function getOpenedFeedbackClient()
     {
         if (!isset($this->feedbackClient)) {
-            $this->feedbackClient = $this->getOpenedClient(new ServiceFeedbackClient());
+            $this->feedbackClient = $this->getOpenedClient(new ServiceClient());
         }
 
         return $this->feedbackClient;
@@ -158,71 +161,20 @@ class Apns extends BaseAdapter
      *
      * @return \ZendService\Apple\Apns\Message
      */
-    public function getServiceMessageFromOrigin(DeviceInterface $device, BaseOptionedModel $message)
+    public function getServiceMessageFromOrigin(BaseOptionedModel $message)
     {
-        $badge = ($message->hasOption('badge'))
-            ? (int) ($message->getOption('badge') + $device->getParameter('badge', 0))
-            : false
-        ;
+        $options = $message->getOptions();
+        $alert = Alert::create()->setTitle($message->getText());
+        $alert = $alert->setBody($message->getText());
 
-        $sound = $message->getOption('sound', 'bingbong.aiff');
-        $contentAvailable = $message->getOption('content-available');
-        $category = $message->getOption('category');
+        $payload = Payload::create()->setAlert($alert);
+        $this->getCustomParameters($payload, $options);
 
-        $alert = new ServiceAlert(
-            $message->getText(),
-            $message->getOption('actionLocKey'),
-            $message->getOption('locKey'),
-            $message->getOption('locArgs'),
-            $message->getOption('launchImage'),
-            $message->getOption('title'),
-            $message->getOption('titleLocKey'),
-            $message->getOption('titleLocArgs')
-        );
-        if ($actionLocKey = $message->getOption('actionLocKey')) {
-            $alert->setActionLocKey($actionLocKey);
-        }
-        if ($locKey = $message->getOption('locKey')) {
-            $alert->setLocKey($locKey);
-        }
-        if ($locArgs = $message->getOption('locArgs')) {
-            $alert->setLocArgs($locArgs);
-        }
-        if ($launchImage = $message->getOption('launchImage')) {
-            $alert->setLaunchImage($launchImage);
-        }
-        if ($title = $message->getOption('title')) {
-            $alert->setTitle($title);
-        }
-        if ($titleLocKey = $message->getOption('titleLocKey')) {
-            $alert->setTitleLocKey($titleLocKey);
-        }
-        if ($titleLocArgs = $message->getOption('titleLocArgs')) {
-            $alert->setTitleLocArgs($titleLocArgs);
+        foreach ($options as $key => $value) {
+            $payload->setCustomValue($key, $value);
         }
 
-        $serviceMessage = new ServiceMessage();
-        $serviceMessage->setId(sha1($device->getToken().$message->getText()));
-        $serviceMessage->setAlert($alert);
-        $serviceMessage->setToken($device->getToken());
-        if (false !== $badge) {
-            $serviceMessage->setBadge($badge);
-        }
-        $serviceMessage->setCustom($message->getOption('custom', []));
-
-        if (null !== $sound) {
-            $serviceMessage->setSound($sound);
-        }
-
-        if (null !== $contentAvailable) {
-            $serviceMessage->setContentAvailable($contentAvailable);
-        }
-
-        if (null !== $category) {
-            $serviceMessage->setCategory($category);
-        }
-
-        return $serviceMessage;
+        return $payload;
     }
 
     /**
@@ -230,7 +182,7 @@ class Apns extends BaseAdapter
      */
     public function supports($token)
     {
-        return (ctype_xdigit($token) && 64 == strlen($token));
+        return is_string($token); //@todo check token
     }
 
     /**
@@ -246,7 +198,13 @@ class Apns extends BaseAdapter
      */
     public function getDefaultParameters()
     {
-        return ['passPhrase' => null];
+        return [
+            'key_id' => null,
+            'team_id' => null,
+            'app_bundle_id' => null,
+            'private_key_path' => null,
+            'private_key_secret' => null
+        ];
     }
 
     /**
@@ -254,6 +212,33 @@ class Apns extends BaseAdapter
      */
     public function getRequiredParameters()
     {
-        return ['certificate'];
+        return [
+            'key_id',
+            'team_id',
+            'app_bundle_id',
+            'private_key_path',
+            'private_key_secret'
+        ];
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function getCustomParameters($payload, &$options = [])
+    {
+        $data = [
+            'badge' => 'setBadge',
+            'sound' => 'setSound',
+            'contentAvailable' => 'setContentAvailability',
+            'category' => 'setCategory',
+            'threadId' => 'setThreadId'
+        ];
+
+        foreach ($data as $key => $setterMethod) {
+            if (isset($options[$key])) {
+                $payload->$setterMethod($options[$key]);
+                unset($options[$key]);
+            }
+        }
     }
 }

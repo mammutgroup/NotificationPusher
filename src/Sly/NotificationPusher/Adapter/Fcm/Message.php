@@ -1,7 +1,8 @@
-<?php
-namespace NotificationPusherAdapter\Adapter\Fcm;
+<?php namespace Sly\NotificationPusher\Adapter\Fcm;
+
 use Zend\Json\Json;
 use ZendService\Google\Gcm\Message as BaseMessage;
+
 class Message extends BaseMessage
 {
     /**
@@ -16,6 +17,7 @@ class Message extends BaseMessage
      * @var string
      */
     protected $priority;
+
     /**
      * Set the priority.
      *
@@ -28,6 +30,7 @@ class Message extends BaseMessage
         $this->priority = $priority;
         return $this;
     }
+
     /**
      * Get priority.
      *
@@ -37,6 +40,7 @@ class Message extends BaseMessage
     {
         return $this->priority;
     }
+
     /**
      * {@inheritdoc}
      */

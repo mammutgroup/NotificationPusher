@@ -42,7 +42,7 @@ class Gcm extends BaseAdapter
     /**
      * @var ServiceClient
      */
-    private $openedClient;
+    protected $openedClient;
 
     /**
      * {@inheritdoc}
