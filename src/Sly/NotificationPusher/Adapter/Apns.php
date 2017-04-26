@@ -164,7 +164,7 @@ class Apns extends BaseAdapter
     public function getServiceMessageFromOrigin(BaseOptionedModel $message)
     {
         $options = $message->getOptions();
-        $alert = Alert::create()->setTitle($message->getText());
+        $alert = Alert::create()->setTitle('');
         $alert = $alert->setBody($message->getText());
 
         $payload = Payload::create()->setAlert($alert);
